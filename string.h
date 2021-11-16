@@ -91,9 +91,9 @@ public:
         storage = new char[capacity];
     }
 
-    String substr(size_t start, size_t count)const{
+    String substr(size_t start, size_t count) const{
         String tmp;
-        memcpy(tmp, storage + start, count);
+        memcpy(tmp.storage, storage + start, count);
         return tmp;
     }
 
@@ -139,7 +139,7 @@ public:
             storage = new char[capacity];
             memcpy(storage, tmp, len);
         }
-        memcpy(storage+len, str, str.len);
+        memcpy(storage+len, str.storage, str.len);
         len += str.len;
         return *this;
     }
