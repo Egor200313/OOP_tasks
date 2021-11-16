@@ -153,6 +153,9 @@ class List{
         Node* next;
         T value;
         Node(const T& val):value(val){}
+
+        template<typename... Args>
+        Node(Args... args): value(std::forward<Args>(args)...){}
         Node(){};
         ~Node() = default;
     };
@@ -185,9 +188,9 @@ public:
         using iterator_category = std::bidirectional_iterator_tag;
         using difference_type = int;
         using value_type = std::conditional_t<IsConst, const T, T>;
-        using pointer = std::conditional_t<IsConst, const Node*, Node*>;
+        using pointer = std::conditional_t<IsConst, const T*, T*>;
         using reference = std::conditional_t<IsConst, const T&, T&>;
-
+        common_iterator() = default;
         common_iterator(std::conditional_t<IsConst, const Node*, Node*> ptr): ptr(ptr){}// pointer
 
         common_iterator(const common_iterator<false>& iter){
@@ -198,8 +201,8 @@ public:
             return ptr->value;
         }
 
-        std::conditional_t<IsConst, const Node*, Node*> operator->()const{// pointer
-            return ptr;
+        std::conditional_t<IsConst, const T*, T*> operator->(){// pointer
+            return &(ptr->value);
         }
 
         common_iterator& operator++(){
@@ -270,23 +273,19 @@ public:
         alloc = lst.alloc;
         allocT = AllocTraits::select_on_container_copy_construction(lst.allocT);
         im = alloc.allocate(1);
-        Node* head = alloc.allocate(1);
-        AllocTraits::construct(alloc, head, lst.im->next->value);
-        head->prev = im;
-        im->prev = head;
-        im->next = head;
-        head->next = im;
-        sz = lst.sz;
-        Node* cur = lst.im->next->next;
-        for (size_t i = 1; i < lst.sz; ++i) {
-            Node* new_node = alloc.allocate(1);
-            AllocTraits::construct(alloc, new_node, cur->value);
-            cur=cur->next;
-            new_node->prev = im->prev;
-            new_node->next = im;
-            im->prev->next = new_node;
-            im->prev = new_node;
+        Node* t = lst.im->next;
+        for (int i = 0; i < int(lst.sz); ++i){
+            push_back(t->value);
+            t = t->next;
         }
+    }
+
+    List(List&& lst){
+        alloc = std::move(lst.alloc);
+        im = std::move(lst.im);
+        lst.im = nullptr;
+        sz = lst.sz;
+        lst.sz = 0;
     }
 
     List& operator = (const List& lst){
@@ -296,30 +295,30 @@ public:
 
         }
         im = alloc.allocate(1);
-        Node *head = alloc.allocate(1);
-        AllocTraits::construct(alloc, head, *lst.begin());
-        head->prev = im;
-        im->prev = head;
-        im->next = head;
-        head->next = im;
-        sz = lst.sz;
-
-        Node* cur = lst.im->next->next;
-        for (size_t i = 1; i < lst.sz; ++i) {
-            Node* new_node = alloc.allocate(1);
-            AllocTraits::construct(alloc, new_node, cur->value);
-            cur=cur->next;
-            new_node->prev = im->prev;
-            new_node->next = im;
-            im->prev->next = new_node;
-            im->prev = new_node;
+        Node* t = lst.im->next;
+        for (int i = 0; i < int(lst.sz); ++i){
+            push_back(t->value);
+            t = t->next;
         }
+        return *this;
+    }
+
+    List& operator = (List&& lst){
+        while (sz != 0) pop_back();
+        if (AllocTraits::propagate_on_container_move_assignment::value){
+            if (allocT != lst.allocT) allocT = std::move(lst.allocT);
+
+        }
+        alloc = std::move(lst.alloc);
+        im = lst.im;
+        lst.im = nullptr;
+        sz = lst.sz;
+        lst.sz = 0;
         return *this;
     }
 
     ~List(){
         for (int i = 0; i < static_cast<int>(sz); ++i) pop_back();
-        AllocTraits::destroy(alloc, im);
         alloc.deallocate(im, 1);
     }
 
@@ -343,6 +342,19 @@ public:
         }
         ++sz;
     }
+    void push_back(Node* new_back){
+        if (sz == 0){
+            im->next = new_back;
+            im->prev = new_back;
+            new_back->next = im;
+            new_back->prev = im;
+        }else{
+            link(im->prev,im, new_back);
+        }
+        ++sz;
+    }
+
+
     void pop_back() {
         if (sz == 1) {
             --sz;
@@ -359,9 +371,35 @@ public:
             --sz;
         }
     }
+
     void push_front(const T& item){
         Node* new_front = alloc.allocate(1);
         AllocTraits::construct(alloc, new_front, item);
+        if (sz == 0){
+            im->next = new_front;
+            im->prev = new_front;
+            new_front->prev = im;
+            new_front->next = im;
+        }else{
+            link(im, im->next, new_front);
+        }
+        ++sz;
+    }
+    template<typename Type>
+    void push_front(Type&& item){
+        Node* new_front = alloc.allocate(1);
+        AllocTraits::construct(alloc, new_front, std::forward<Type>(item));
+        if (sz == 0){
+            im->next = new_front;
+            im->prev = new_front;
+            new_front->prev = im;
+            new_front->next = im;
+        }else{
+            link(im, im->next, new_front);
+        }
+        ++sz;
+    }
+    void push_front(Node* new_front){
         if (sz == 0){
             im->next = new_front;
             im->prev = new_front;
@@ -469,5 +507,29 @@ public:
     }
     const_reverse_iterator crend() const{
         return const_reverse_iterator(cbegin());
+    }
+
+    template<typename... Args>
+    Node* create(Args... args){
+        Node* new_node = alloc.allocate(1);
+        std::allocator_traits<Allocator>::construct(get_allocator(), &new_node->value, std::forward<Args>(args)...);
+        return new_node;
+    }
+
+    void exchange(List& oth){
+        Node* item = nullptr;
+        if (sz == 1) {
+            --sz;
+            item = im->next;
+            im->prev = nullptr;
+            im->next = nullptr;
+        } else {
+            im->next->next->prev = im;
+            Node* new_next = im->next->next;
+            item = im->next;
+            im->next = new_next;
+            --sz;
+        }
+        oth.push_back(item);
     }
 };
