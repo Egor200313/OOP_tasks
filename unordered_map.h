@@ -34,7 +34,6 @@ private:
 
 public:
 
-
     UnorderedMap(int size = 4, const Hash& hash = Hash(), const Equal& eq = Equal(), const Alloc& alloc = Alloc()):
     array_size(size),
     hash(hash),
@@ -58,6 +57,7 @@ public:
         rev_order(oth.rev_order),
         data(oth.data)
         {}
+
     UnorderedMap(UnorderedMap&& oth):
         hash(std::move(oth.hash)),
         eq(std::move(oth.eq)),
